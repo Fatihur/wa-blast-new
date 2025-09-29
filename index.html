@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WhatsApp Blast AI</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'primary': '#005d5b',
+              'primary-foreground': '#ffffff',
+              'secondary': '#f0f0f0',
+              'secondary-foreground': '#111827',
+              'background': '#ffffff',
+              'foreground': '#111827',
+              'card': '#ffffff',
+              'card-foreground': '#111827',
+              'muted': '#f3f4f6',
+              'muted-foreground': '#6b7280',
+              'accent': '#e5e7eb',
+              'accent-foreground': '#111827',
+              'destructive': '#ef4444',
+              'destructive-foreground': '#ffffff',
+              'border': '#e5e7eb',
+              'input': '#e5e7eb',
+              'ring': '#005d5b',
+            },
+            borderRadius: {
+              lg: `0.5rem`,
+              md: `calc(0.5rem - 2px)`,
+              sm: `calc(0.5rem - 4px)`,
+            },
+          }
+        }
+      }
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "recharts": "https://aistudiocdn.com/recharts@^3.2.1",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.21.0"
+  }
+}
+</script>
+<style>
+    /* Responsive Table Styles */
+    @media screen and (max-width: 768px) {
+      .responsive-table thead {
+        display: none;
+      }
+      .responsive-table tr {
+        display: block;
+        border-bottom: 2px solid #e5e7eb; /* border color */
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+      }
+       .responsive-table tr:last-child {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: 0;
+      }
+      .responsive-table td {
+        display: block;
+        text-align: right;
+        padding-left: 50%;
+        position: relative;
+      }
+      .responsive-table td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 0.5rem; /* p-2 */
+        width: 45%;
+        padding-right: 0.75rem; /* pr-3 */
+        white-space: nowrap;
+        text-align: left;
+        font-weight: 600; /* semibold */
+        color: #111827; /* foreground color */
+      }
+    }
+
+    /* Zebra Striping for better readability */
+    .styled-table tbody tr:nth-child(even) {
+      background-color: #f9fafb; /* A light gray, similar to Tailwind's gray-50 */
+    }
+    .styled-table tbody tr:hover {
+        background-color: #f3f4f6; /* A slightly darker gray for hover, similar to accent */
+    }
+</style>
+</head>
+  <body class="bg-background">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
