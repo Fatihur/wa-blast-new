@@ -1,84 +1,8 @@
 import type { Campaign, Contact, ApiSettings, ManagedFile } from '../types';
 import { MessageStatus } from '../types';
 import { getFile } from './dbService';
-
-// Helper function to convert a data URL to a File object
-async function dataUrlToFile(dataUrl: string, fileName: string, mimeType: string): Promise<File> {
-  const res = await fetch(dataUrl);
-  const blob = await res.blob();
-  return new File([blob], fileName, { type: mimeType });
-}
-
-const fonnteSend = async (contact: Contact, personalizedMessage: string, apiKey: string, fileAttachment?: { name: string; data: string; type: string }): Promise<{id: string}> => {
-    const body: any = {
-      target: contact.number,
-      message: personalizedMessage,
-    };
-    if (fileAttachment) {
-      body.file = fileAttachment.data;
-      body.filename = fileAttachment.name;
-    }
-
-    const response = await fetch('https://api.fonnte.com/send', {
-        method: 'POST',
-        headers: { 'Authorization': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-    });
-
-    const responseData = await response.json();
-    if (!response.ok) {
-        let errorMsg = responseData.detail || responseData.reason || JSON.stringify(responseData);
-        throw new Error(errorMsg);
-    }
-    const messageId = responseData.id_log || (responseData.id && responseData.id[0]) || `mock_${Date.now()}`;
-    return { id: messageId };
-};
-
-const baileysSend = async (contact: Contact, personalizedMessage: string, settings: Pick<ApiSettings, 'baileysServerUrl' | 'baileysApiKey'>, fileAttachment?: { name: string; data: string; type: string }): Promise<{id: string}> => {
-    if (!settings.baileysServerUrl || !settings.baileysApiKey) {
-      throw new Error("Baileys connection details are missing.");
-    }
-    const authHeader = `Bearer ${settings.baileysApiKey}`;
-    const headers: HeadersInit = { 'Authorization': authHeader };
-    const server = settings.baileysServerUrl;
-    
-    let endpoint: string;
-    let body: BodyInit;
-    
-    if (fileAttachment) {
-        endpoint = `${server}/messages/send-media`;
-        const dataUrl = `data:${fileAttachment.type};base64,${fileAttachment.data}`;
-        const file = await dataUrlToFile(dataUrl, fileAttachment.name, fileAttachment.type);
-        
-        const formData = new FormData();
-        formData.append('number', contact.number);
-        formData.append('caption', personalizedMessage);
-        formData.append('file', file);
-        
-        body = formData;
-    } else {
-        endpoint = `${server}/messages/send-text`;
-        headers['Content-Type'] = 'application/json';
-        body = JSON.stringify({
-          number: contact.number,
-          text: personalizedMessage,
-        });
-    }
-
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: headers,
-        body: body
-    });
-
-    const responseData = await response.json();
-     if (responseData.status !== 'success') {
-        let errorMsg = responseData.message || JSON.stringify(responseData);
-        throw new Error(errorMsg);
-    }
-    const messageId = responseData?.data?.id || `mock_${Date.now()}`;
-    return { id: messageId };
-};
+import { sendMessage as sendBaileysMessage } from './baileysService';
+import { sendMessage as sendFonnteMessage } from './fonnteService';
 
 
 export const sendCampaign = async (
@@ -131,13 +55,13 @@ export const sendCampaign = async (
             
             let sendResult;
             if (apiSettings.provider === 'baileys') {
-                if (apiSettings.baileysSessionStatus === 'connected' && apiSettings.baileysServerUrl && apiSettings.baileysApiKey) {
-                    sendResult = await baileysSend(contact, personalizedMessage, apiSettings, finalAttachment);
+                if (apiSettings.baileysSessionStatus === 'connected') {
+                    sendResult = await sendBaileysMessage(contact, personalizedMessage, apiSettings, finalAttachment);
                 } else {
                     throw new Error('Baileys is not connected. Please connect in Settings.');
                 }
             } else { // Fonnte
-                sendResult = await fonnteSend(contact, personalizedMessage, apiSettings.fonnteApiKey, finalAttachment);
+                sendResult = await sendFonnteMessage(contact, personalizedMessage, apiSettings.fonnteApiKey, finalAttachment);
             }
             
             campaignCopy.logs[logIndex].status = MessageStatus.Sent;

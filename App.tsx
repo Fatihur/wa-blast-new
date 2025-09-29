@@ -1,9 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Dashboard from './components/Dashboard';
 import Campaigns from './components/Campaigns';
 import Contacts from './components/Contacts';
 import Groups from './components/Groups';
-import SmartReply from './components/SmartReply';
 import Settings from './components/Settings';
 import FileManager from './components/FileManager';
 import type { Contact, Campaign, ApiSettings, Group, ManagedFile, DraftCampaign } from './types';
@@ -11,11 +10,19 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import { sendCampaign } from './services/campaignService';
 import { NotificationProvider } from './contexts/NotificationContext';
 
+
 const App: React.FC = () => {
   const [view, setView] = useState<string>('dashboard');
   const [openMenu, setOpenMenu] = useState<string | null>('blast');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [apiSettings, setApiSettings] = useLocalStorage<ApiSettings>('apiSettings', { provider: 'fonnte', fonnteApiKey: '', geminiApiKey: '', baileysSessionStatus: 'disconnected', fonnteDeviceStatus: 'disconnected', antiBan: { delay: 4, quota: 100 } });
+  const [apiSettings, setApiSettings] = useLocalStorage<ApiSettings>('apiSettings', { 
+    provider: 'fonnte', 
+    fonnteApiKey: '', 
+    geminiApiKey: '', 
+    baileysSessionStatus: 'disconnected', 
+    fonnteDeviceStatus: 'disconnected', 
+    antiBan: { delay: 4, quota: 100 },
+  });
   const [contacts, setContacts] = useLocalStorage<Contact[]>('contacts', []);
   const [campaigns, setCampaigns] = useLocalStorage<Campaign[]>('campaigns', []);
   const [groups, setGroups] = useLocalStorage<Group[]>('groups', [{id: 'general', name: 'General'}]);
@@ -40,7 +47,7 @@ const App: React.FC = () => {
 
     return () => clearInterval(interval);
   }, [campaigns, contacts, apiSettings, setCampaigns]);
-
+  
   const handleSetView = (targetView: string) => {
     setView(targetView);
     if (window.innerWidth < 768) { // md breakpoint
@@ -94,8 +101,6 @@ const App: React.FC = () => {
         return <Groups groups={groups} setGroups={setGroups} />;
       case 'file-manager':
         return <FileManager files={managedFiles} setFiles={setManagedFiles} />;
-      case 'smart-reply':
-        return <SmartReply apiSettings={apiSettings} />;
       case 'settings':
         return <Settings settings={apiSettings} setSettings={setApiSettings} />;
       default:
@@ -142,7 +147,6 @@ const App: React.FC = () => {
             </CollapsibleNavItem>
             
             <NavItem icon="fas fa-folder" label="File Manager" targetView="file-manager" />
-            <NavItem icon="fas fa-reply-all" label="Smart Reply" targetView="smart-reply" />
           </nav>
           <div className="mt-auto">
             <NavItem icon="fas fa-cog" label="Settings" targetView="settings" />

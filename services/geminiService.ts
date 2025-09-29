@@ -39,36 +39,6 @@ export const generateCampaignMessage = async (apiKey: string, prompt: string): P
   }
 };
 
-export const getReplySuggestions = async (apiKey: string, message: string): Promise<string[]> => {
-  if (!apiKey) throw new Error("Gemini API key is not set.");
-  const genAI = initializeGenAI(apiKey);
-
-  try {
-    const response: GenerateContentResponse = await genAI.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `A customer sent this message via WhatsApp: "${message}". Provide 3 short, helpful, and professional reply suggestions. Each suggestion should be under 20 words.`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-                suggestions: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING }
-                }
-            }
-        }
-      }
-    });
-    
-    const jsonResponse = JSON.parse(response.text);
-    return jsonResponse.suggestions || [];
-  } catch (error) {
-    console.error("Error getting reply suggestions:", error);
-    throw new Error("Failed to get reply suggestions from AI.");
-  }
-};
-
 export const translateText = async (apiKey: string, text: string, language: string): Promise<string> => {
     if (!apiKey) throw new Error("Gemini API key is not set.");
     const genAI = initializeGenAI(apiKey);

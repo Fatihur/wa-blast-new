@@ -6,6 +6,7 @@ import { generateCampaignMessage, translateText } from '../services/geminiServic
 import { sendCampaign } from '../services/campaignService';
 import { useNotification } from '../contexts/NotificationContext';
 import ContactSelectionModal from './ContactSelectionModal';
+import FileMatchResultModal from './FileMatchResultModal';
 
 interface CampaignCreatorProps {
   mode: 'single' | 'bulk' | 'file';
@@ -39,7 +40,7 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [matchedFiles, setMatchedFiles] = useState<{ contactId: string, file: ManagedFile }[]>([]);
   const { addNotification } = useNotification();
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   
   const [loadingAction, setLoadingAction] = useState<'generate' | 'translate' | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -48,6 +49,14 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
   const [showAiModal, setShowAiModal] = useState<'generate' | 'translate' | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  const [matchResultModalData, setMatchResultModalData] = useState<{
+    matched: { contact: Contact, file: ManagedFile }[];
+    unmatched: Contact[];
+  } | null>(null);
+  
+  const [isMatchedListOpen, setIsMatchedListOpen] = useState(true);
+  const [isUnmatchedListOpen, setIsUnmatchedListOpen] = useState(true);
   
   // Initialize draft with default values
   useEffect(() => {
@@ -107,6 +116,25 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
       setMatchedFiles(newMatchedFiles);
     }
   }, [draft.selectedContacts, contacts, managedFiles, mode]);
+
+  const { matched, unmatched } = useMemo(() => {
+    if (mode !== 'file' || !draft.selectedContacts) {
+      return { matched: [], unmatched: [] };
+    }
+    const chosenContacts = contacts.filter(c => draft.selectedContacts!.includes(c.id));
+    const matchedData: { contact: Contact, file: ManagedFile }[] = matchedFiles
+        .map(mf => ({
+            contact: contacts.find(c => c.id === mf.contactId)!,
+            file: mf.file
+        }))
+        .filter(item => item.contact);
+
+    const matchedContactIds = new Set(matchedData.map(m => m.contact.id));
+    const unmatchedData = chosenContacts.filter(c => !matchedContactIds.has(c.id));
+    
+    return { matched: matchedData, unmatched: unmatchedData };
+  }, [mode, draft.selectedContacts, contacts, matchedFiles]);
+
 
   const handleFormat = (formatType: 'bold' | 'italic' | 'strike' | 'mono') => {
     const textarea = textareaRef.current;
@@ -193,7 +221,7 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
     setAiPrompt('');
   };
 
-  const validateForm = () => {
+  const validateForm = useCallback(() => {
       const newErrors: {[key: string]: string} = {};
       if (!draft.name?.trim()) newErrors.name = "Campaign name is required.";
       if (!draft.message?.trim()) newErrors.message = "Message cannot be empty.";
@@ -208,79 +236,142 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
       
       setErrors(newErrors);
       return Object.keys(newErrors).length === 0;
-  };
+  }, [draft, mode]);
+
+  const handleConfirmAndSend = useCallback(async () => {
+    if (!matchResultModalData || !draft.name || !draft.message) return;
+
+    setIsSending(true);
+
+    const { matched } = matchResultModalData;
+    const contactsToSend = matched.map(m => m.contact);
+    if (contactsToSend.length === 0) {
+        addNotification({ type: 'warning', title: 'Tidak Ada Penerima', message: 'Tidak ada kontak yang cocok untuk dikirimi kampanye.' });
+        setIsSending(false);
+        setMatchResultModalData(null);
+        return;
+    }
+
+    let schedule: Date | null = null;
+    if (draft.isScheduling && draft.scheduleDate && draft.scheduleTime) {
+        schedule = new Date(`${draft.scheduleDate}T${draft.scheduleTime}`);
+        if (isNaN(schedule.getTime())) {
+            setErrors({ schedule: 'Invalid schedule date or time.' });
+            setIsSending(false);
+            return;
+        }
+    }
+
+    const campaignLogs = contactsToSend.map(c => ({
+        contact: c,
+        status: MessageStatus.Pending,
+        timestamp: new Date().toISOString(),
+    }));
+    
+    const campaign: Campaign = {
+        id: `camp_${Date.now()}`,
+        name: draft.name,
+        message: draft.message,
+        contacts: contactsToSend.map(c => c.id),
+        schedule,
+        createdAt: new Date(),
+        status: schedule ? 'Scheduled' : 'Draft',
+        logs: campaignLogs,
+    };
+    
+    onAddCampaign(campaign);
+    setMatchResultModalData(null); // Close modal right away
+
+    if (schedule) {
+        addNotification({
+            type: 'info',
+            title: 'Kampanye Dijadwalkan',
+            message: `"${campaign.name}" dijadwalkan untuk ${schedule.toLocaleString()}.`
+        });
+        setIsSending(false);
+    } else {
+        const contactFilesMap = matched.reduce((acc, curr) => {
+            acc[curr.contact.id] = curr.file;
+            return acc;
+        }, {} as { [contactId: string]: ManagedFile });
+        
+        const { sentCount, failedCount } = await sendCampaign(campaign, contacts, apiSettings, onAddCampaign, contactFilesMap);
+        addNotification({
+            type: failedCount > 0 ? 'warning' : 'success',
+            title: `Kampanye "${campaign.name}" Selesai`,
+            message: `Hasil: ${sentCount} terkirim, ${failedCount} gagal.`
+        });
+        setIsSending(false);
+    }
+  }, [draft, contacts, apiSettings, onAddCampaign, matchResultModalData, addNotification]);
 
   const handleCreateCampaign = useCallback(async () => {
-      if (!validateForm()) return;
+    if (!validateForm()) return;
+    
+    // Logic for file matching mode -> show modal first
+    if (mode === 'file') {
+        const chosenContacts = contacts.filter(c => draft.selectedContacts!.includes(c.id));
+        const matchedData = matchedFiles
+            .map(mf => ({
+                contact: contacts.find(c => c.id === mf.contactId)!,
+                file: mf.file
+            }))
+            .filter(item => item.contact); // Ensure contact exists
 
-      setIsSending(true);
+        const matchedContactIds = new Set(matchedData.map(m => m.contact.id));
+        const unmatchedData = chosenContacts.filter(c => !matchedContactIds.has(c.id));
 
-      const finalContacts = mode === 'single' 
-        ? [{id: 'single', name: 'Recipient', number: draft.singleNumber!, group: 'Single'}] 
-        : contacts.filter(c => draft.selectedContacts!.includes(c.id));
-      
-      let schedule: Date | null = null;
-      if (draft.isScheduling && draft.scheduleDate && draft.scheduleTime) {
-          schedule = new Date(`${draft.scheduleDate}T${draft.scheduleTime}`);
-          if (isNaN(schedule.getTime())) {
-              setErrors({ schedule: 'Invalid schedule date or time.' });
-              setIsSending(false);
-              return;
-          }
-      }
+        setMatchResultModalData({ matched: matchedData, unmatched: unmatchedData });
+        return; // Stop here, wait for modal confirmation
+    }
 
-      let campaignLogs;
-      let finalContactIds;
+    // Original logic for single/bulk modes
+    setIsSending(true);
+    const finalContacts = mode === 'single' 
+      ? [{id: 'single', name: 'Recipient', number: draft.singleNumber!, group: 'Single'}] 
+      : contacts.filter(c => draft.selectedContacts!.includes(c.id));
+    
+    let schedule: Date | null = null;
+    if (draft.isScheduling && draft.scheduleDate && draft.scheduleTime) {
+        schedule = new Date(`${draft.scheduleDate}T${draft.scheduleTime}`);
+        if (isNaN(schedule.getTime())) {
+            setErrors({ schedule: 'Invalid schedule date or time.' });
+            setIsSending(false);
+            return;
+        }
+    }
+    
+    const campaignLogs = finalContacts.map(c => ({ contact: c, status: MessageStatus.Pending, timestamp: new Date().toISOString() }));
+    
+    const campaign: Campaign = {
+        id: `camp_${Date.now()}`, name: draft.name!, message: draft.message!,
+        contacts: finalContacts.map(c => c.id),
+        schedule, createdAt: new Date(),
+        status: schedule ? 'Scheduled' : 'Draft',
+        logs: campaignLogs,
+        ...(draft.attachment && { attachment: draft.attachment }),
+    };
+    
+    onAddCampaign(campaign);
 
-      if (mode === 'file') {
-          const matchedContactIds = new Set(matchedFiles.map(mf => mf.contactId));
-          finalContactIds = finalContacts.map(c => c.id);
-          campaignLogs = finalContacts.map(c => ({
-              contact: c,
-              status: matchedContactIds.has(c.id) ? MessageStatus.Pending : MessageStatus.Failed,
-              timestamp: new Date().toISOString(),
-              error: matchedContactIds.has(c.id) ? undefined : 'No matching file found in File Manager'
-          }));
-      } else {
-          finalContactIds = finalContacts.map(c => c.id);
-          campaignLogs = finalContacts.map(c => ({ contact: c, status: MessageStatus.Pending, timestamp: new Date().toISOString() }));
-      }
-      
-      const campaign: Campaign = {
-          id: `camp_${Date.now()}`, name: draft.name!, message: draft.message!,
-          contacts: finalContactIds,
-          schedule, createdAt: new Date(),
-          status: schedule ? 'Scheduled' : 'Draft',
-          logs: campaignLogs,
-          ...(mode !== 'file' && draft.attachment && { attachment: draft.attachment }),
-      };
-      
-      onAddCampaign(campaign);
-
-      if (schedule) {
-          addNotification({
-              type: 'info',
-              title: 'Kampanye Dijadwalkan',
-              message: `"${campaign.name}" dijadwalkan untuk ${schedule.toLocaleString()}.`
-          });
-          setIsSending(false);
-      } else {
-          const contactFilesMap = matchedFiles.reduce((acc, curr) => {
-              acc[curr.contactId] = curr.file;
-              return acc;
-          }, {} as { [contactId: string]: ManagedFile });
-          
-          const { sentCount, failedCount } = await sendCampaign(campaign, contacts, apiSettings, onAddCampaign, contactFilesMap);
-          addNotification({
-              type: failedCount > 0 ? 'warning' : 'success',
-              title: `Kampanye "${campaign.name}" Selesai`,
-              message: `Hasil: ${sentCount} terkirim, ${failedCount} gagal.`
-          });
-          setIsSending(false);
-      }
-
-  }, [draft, contacts, apiSettings, onAddCampaign, mode, matchedFiles, addNotification]);
-
+    if (schedule) {
+        addNotification({
+            type: 'info',
+            title: 'Kampanye Dijadwalkan',
+            message: `"${campaign.name}" dijadwalkan untuk ${schedule.toLocaleString()}.`
+        });
+        setIsSending(false);
+    } else {
+        const { sentCount, failedCount } = await sendCampaign(campaign, contacts, apiSettings, onAddCampaign, {});
+        addNotification({
+            type: failedCount > 0 ? 'warning' : 'success',
+            title: `Kampanye "${campaign.name}" Selesai`,
+            message: `Hasil: ${sentCount} terkirim, ${failedCount} gagal.`
+        });
+        setIsSending(false);
+    }
+  }, [draft, contacts, apiSettings, onAddCampaign, mode, matchedFiles, addNotification, validateForm]);
+  
   const allCustomFields = useMemo(() => {
     const keys = new Set<string>();
     contacts.forEach(c => {
@@ -357,7 +448,7 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
         <div>
             <h3 className="text-lg font-semibold mb-2">Pilih Kontak</h3>
             <div className="flex items-start gap-4">
-                <button type="button" onClick={() => setIsModalOpen(true)} className="bg-secondary text-secondary-foreground px-4 py-2 rounded-md font-semibold hover:bg-accent flex-shrink-0">
+                <button type="button" onClick={() => setIsContactModalOpen(true)} className="bg-secondary text-secondary-foreground px-4 py-2 rounded-md font-semibold hover:bg-accent flex-shrink-0">
                     <i className="fas fa-users mr-2"></i>
                     Pilih Kontak
                 </button>
@@ -369,28 +460,61 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
         </div>
       )}
 
-      {mode === 'file' && (draft.selectedContacts?.length || 0) > 0 && (
+      {mode === 'file' && (
          <div>
             <h3 className="text-lg font-semibold mb-2">Pencocokan File</h3>
-             <p className="text-sm text-muted-foreground mb-2">Aplikasi akan otomatis mencocokkan kontak terpilih dengan file dari File Manager berdasarkan nama.</p>
-            <div className="mt-4 max-h-48 overflow-y-auto border rounded-md p-2">
-                <h4 className="font-semibold text-sm mb-2">Hasil Pencocokan:</h4>
-                <ul className="text-sm space-y-1">
-                    {contacts.filter(c => draft.selectedContacts!.includes(c.id)).map(contact => {
-                        const matchedFile = matchedFiles.find(mf => mf.contactId === contact.id);
-                        return (
-                            <li key={contact.id} className="flex items-center justify-between p-1 rounded">
-                                <span>{contact.name}</span>
-                                {matchedFile ? (
-                                    <span className="text-green-600 text-xs font-medium flex items-center"><i className="fas fa-check-circle mr-1"></i> {matchedFile.file.name}</span>
-                                ) : (
-                                    <span className="text-red-600 text-xs font-medium flex items-center"><i className="fas fa-times-circle mr-1"></i> No file matched</span>
-                                )}
-                            </li>
-                        )
-                    })}
-                </ul>
-            </div>
+            {(draft.selectedContacts?.length || 0) > 0 ? (
+                <div className="space-y-4 mt-2">
+                    <div>
+                        <button onClick={() => setIsMatchedListOpen(!isMatchedListOpen)} className="w-full flex justify-between items-center text-left font-semibold text-green-700 p-2 rounded-md hover:bg-green-50">
+                            <span><i className="fas fa-check-circle mr-2"></i>{matched.length} Kontak Cocok (Akan Dikirim)</span>
+                            <i className={`fas fa-chevron-down transition-transform ${isMatchedListOpen ? 'rotate-180' : ''}`}></i>
+                        </button>
+                        {isMatchedListOpen && (
+                            matched.length > 0 ? (
+                                <div className="mt-2 border rounded-md max-h-40 overflow-y-auto">
+                                    <ul className="divide-y divide-border text-sm">
+                                        {matched.map(({ contact, file }) => (
+                                            <li key={contact.id} className="p-2 flex justify-between items-center bg-green-50/50">
+                                                <span>{contact.name} ({contact.number})</span>
+                                                <span className="text-muted-foreground text-xs font-mono bg-gray-200 px-1 rounded">{file.name}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            ) : (
+                                <p className="text-sm text-muted-foreground p-3 mt-2 border rounded-md bg-gray-50">Tidak ada kontak yang cocok.</p>
+                            )
+                        )}
+                    </div>
+
+                    <div>
+                        <button onClick={() => setIsUnmatchedListOpen(!isUnmatchedListOpen)} className="w-full flex justify-between items-center text-left font-semibold text-yellow-700 p-2 rounded-md hover:bg-yellow-50">
+                            <span><i className="fas fa-exclamation-triangle mr-2"></i>{unmatched.length} Kontak Tidak Cocok (Tidak Akan Dikirim)</span>
+                            <i className={`fas fa-chevron-down transition-transform ${isUnmatchedListOpen ? 'rotate-180' : ''}`}></i>
+                        </button>
+                        {isUnmatchedListOpen && (
+                            unmatched.length > 0 ? (
+                                <div className="mt-2 border rounded-md max-h-40 overflow-y-auto">
+                                    <ul className="divide-y divide-border text-sm">
+                                        {unmatched.map(contact => (
+                                            <li key={contact.id} className="p-2 bg-yellow-50/50">
+                                                {contact.name} ({contact.number})
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            ) : (
+                                <p className="text-sm text-muted-foreground p-3 mt-2 border rounded-md bg-gray-50">Semua kontak yang dipilih memiliki file yang cocok.</p>
+                            )
+                        )}
+                    </div>
+                </div>
+            ) : (
+                 <p className="text-sm text-muted-foreground p-4 border border-dashed rounded-md text-center mt-2">
+                    Pilih kontak untuk melihat pratinjau pencocokan file di sini.
+                </p>
+            )}
          </div>
       )}
 
@@ -427,10 +551,10 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
         </div>
       )}
 
-      {isModalOpen && (
+      {isContactModalOpen && (
           <ContactSelectionModal
-              isOpen={isModalOpen}
-              onClose={() => setIsModalOpen(false)}
+              isOpen={isContactModalOpen}
+              onClose={() => setIsContactModalOpen(false)}
               onSave={(selectedIds) => {
                   updateDraft('selectedContacts', selectedIds);
               }}
@@ -438,12 +562,20 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
               initialSelectedIds={draft.selectedContacts || []}
           />
       )}
+      
+      <FileMatchResultModal
+        isOpen={!!matchResultModalData}
+        onClose={() => setMatchResultModalData(null)}
+        onConfirm={handleConfirmAndSend}
+        results={matchResultModalData}
+        isSending={isSending}
+      />
 
       <div className="flex justify-end space-x-3 pt-4">
         <button onClick={onCancel} className="bg-secondary text-secondary-foreground px-4 py-2 rounded-md font-semibold hover:bg-accent">Cancel</button>
         <button onClick={handleCreateCampaign} disabled={isSending} className="bg-primary text-primary-foreground px-4 py-2 rounded-md font-semibold flex items-center hover:bg-primary/90 disabled:opacity-50">
-          {isSending ? <i className="fas fa-spinner fa-spin mr-2"></i> : draft.isScheduling ? <i className="fas fa-clock mr-2"></i> : <i className="fas fa-paper-plane mr-2"></i>}
-          {isSending ? 'Memproses...' : draft.isScheduling ? 'Jadwalkan' : 'Kirim Sekarang'}
+          {isSending && !matchResultModalData ? <i className="fas fa-spinner fa-spin mr-2"></i> : draft.isScheduling ? <i className="fas fa-clock mr-2"></i> : <i className="fas fa-paper-plane mr-2"></i>}
+          {isSending && !matchResultModalData ? 'Memproses...' : draft.isScheduling ? 'Jadwalkan' : 'Kirim Sekarang'}
         </button>
       </div>
     </div>

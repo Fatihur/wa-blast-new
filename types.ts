@@ -44,6 +44,14 @@ export interface Campaign {
   };
 }
 
+// FIX: Add AutoReplyRule interface for the auto-reply bot feature.
+export interface AutoReplyRule {
+  id: string;
+  keywords: string;
+  replyMessage: string;
+  enabled: boolean;
+}
+
 export interface ApiSettings {
   provider: 'fonnte' | 'baileys';
   fonnteApiKey: string;
@@ -58,15 +66,10 @@ export interface ApiSettings {
   antiBan: {
     delay: number; // in seconds
     quota: number;
-  }
-}
-
-export interface SmartReplyMessage {
-  id: string;
-  sender: string;
-  text: string;
-  timestamp: Date;
-  suggestions?: string[];
+  };
+  // FIX: Add properties for the auto-reply bot feature.
+  autoReplyEnabled?: boolean;
+  autoReplyRules?: AutoReplyRule[];
 }
 
 export interface ManagedFile {

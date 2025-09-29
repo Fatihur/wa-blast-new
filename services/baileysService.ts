@@ -1,7 +1,15 @@
-import { ApiSettings } from "../types";
+import { ApiSettings, Contact } from "../types";
 
 // This service makes API calls to a self-hosted Baileys server API.
 // It uses an API Key for authentication via a Bearer token.
+
+// Helper function to convert a data URL to a File object
+async function dataUrlToFile(dataUrl: string, fileName: string, mimeType: string): Promise<File> {
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  return new File([blob], fileName, { type: mimeType });
+}
+
 
 const makeApiRequest = async (endpoint: string, settings: Pick<ApiSettings, 'baileysServerUrl' | 'baileysApiKey'>, options: RequestInit = {}) => {
     if (!settings.baileysServerUrl || !settings.baileysApiKey) {
@@ -77,3 +85,48 @@ export const logout = async (settings: Pick<ApiSettings, 'baileysServerUrl' | 'b
         throw error;
     }
 }
+
+export const sendMessage = async (
+    contact: Contact, 
+    message: string, 
+    settings: Pick<ApiSettings, 'baileysServerUrl' | 'baileysApiKey'>, 
+    attachment?: { name: string; data: string; type: string }
+): Promise<{id: string}> => {
+    const headers: HeadersInit = {};
+    
+    let endpoint: string;
+    let body: BodyInit;
+    
+    if (attachment) {
+        endpoint = `/messages/send-media`;
+        const dataUrl = `data:${attachment.type};base64,${attachment.data}`;
+        const file = await dataUrlToFile(dataUrl, attachment.name, attachment.type);
+        
+        const formData = new FormData();
+        formData.append('number', contact.number);
+        formData.append('caption', message);
+        formData.append('file', file);
+        
+        body = formData;
+    } else {
+        endpoint = `/messages/send-text`;
+        headers['Content-Type'] = 'application/json';
+        body = JSON.stringify({
+          number: contact.number,
+          text: message,
+        });
+    }
+
+    const responseData = await makeApiRequest(endpoint, settings, {
+        method: 'POST',
+        headers: headers,
+        body: body
+    });
+
+     if (responseData.status !== 'success') {
+        let errorMsg = responseData.message || JSON.stringify(responseData);
+        throw new Error(errorMsg);
+    }
+    const messageId = responseData?.data?.id || `mock_${Date.now()}`;
+    return { id: messageId };
+};
