@@ -238,17 +238,16 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
       return Object.keys(newErrors).length === 0;
   }, [draft, mode]);
 
-  const handleConfirmAndSend = useCallback(async () => {
-    if (!matchResultModalData || !draft.name || !draft.message) return;
+  const handleModalConfirm = useCallback(async (finalMatched: { contact: Contact, file: ManagedFile }[]) => {
+    if (!draft.name || !draft.message) return;
 
     setIsSending(true);
+    setMatchResultModalData(null); // Close modal immediately
 
-    const { matched } = matchResultModalData;
-    const contactsToSend = matched.map(m => m.contact);
+    const contactsToSend = finalMatched.map(m => m.contact);
     if (contactsToSend.length === 0) {
         addNotification({ type: 'warning', title: 'Tidak Ada Penerima', message: 'Tidak ada kontak yang cocok untuk dikirimi kampanye.' });
         setIsSending(false);
-        setMatchResultModalData(null);
         return;
     }
 
@@ -280,7 +279,6 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
     };
     
     onAddCampaign(campaign);
-    setMatchResultModalData(null); // Close modal right away
 
     if (schedule) {
         addNotification({
@@ -290,7 +288,7 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
         });
         setIsSending(false);
     } else {
-        const contactFilesMap = matched.reduce((acc, curr) => {
+        const contactFilesMap = finalMatched.reduce((acc, curr) => {
             acc[curr.contact.id] = curr.file;
             return acc;
         }, {} as { [contactId: string]: ManagedFile });
@@ -303,7 +301,7 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
         });
         setIsSending(false);
     }
-  }, [draft, contacts, apiSettings, onAddCampaign, matchResultModalData, addNotification]);
+  }, [draft, contacts, apiSettings, onAddCampaign, addNotification]);
 
   const handleCreateCampaign = useCallback(async () => {
     if (!validateForm()) return;
@@ -566,9 +564,10 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
       <FileMatchResultModal
         isOpen={!!matchResultModalData}
         onClose={() => setMatchResultModalData(null)}
-        onConfirm={handleConfirmAndSend}
+        onConfirm={handleModalConfirm}
         results={matchResultModalData}
         isSending={isSending}
+        managedFiles={managedFiles}
       />
 
       <div className="flex justify-end space-x-3 pt-4">

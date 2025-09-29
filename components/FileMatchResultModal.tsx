@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Contact, ManagedFile } from '../types';
 
 interface MatchedResult {
@@ -9,12 +9,13 @@ interface MatchedResult {
 interface FileMatchResultModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (finalMatched: MatchedResult[]) => void;
   results: {
     matched: MatchedResult[];
     unmatched: Contact[];
   } | null;
   isSending: boolean;
+  managedFiles: ManagedFile[];
 }
 
 const FileMatchResultModal: React.FC<FileMatchResultModalProps> = ({
@@ -23,10 +24,30 @@ const FileMatchResultModal: React.FC<FileMatchResultModalProps> = ({
   onConfirm,
   results,
   isSending,
+  managedFiles,
 }) => {
+  const [currentMatched, setCurrentMatched] = useState<MatchedResult[]>([]);
+  const [currentUnmatched, setCurrentUnmatched] = useState<Contact[]>([]);
+
+  useEffect(() => {
+    if (results) {
+      setCurrentMatched(results.matched);
+      setCurrentUnmatched(results.unmatched);
+    }
+  }, [results]);
+
   if (!isOpen || !results) return null;
 
-  const { matched, unmatched } = results;
+  const handleManualMatch = (contactToMatch: Contact, fileId: string) => {
+    if (!fileId) return; // Placeholder selected
+
+    const file = managedFiles.find(f => f.id === fileId);
+    if (!file) return;
+
+    // Move contact from unmatched to matched
+    setCurrentUnmatched(prev => prev.filter(c => c.id !== contactToMatch.id));
+    setCurrentMatched(prev => [...prev, { contact: contactToMatch, file }].sort((a, b) => a.contact.name.localeCompare(b.contact.name)));
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose} role="dialog" aria-modal="true">
@@ -37,7 +58,7 @@ const FileMatchResultModal: React.FC<FileMatchResultModalProps> = ({
         </div>
         
         <p className="text-sm text-muted-foreground mb-4">
-          Tinjau hasil pencocokan file sebelum mengirim. Kampanye hanya akan dikirim ke kontak yang memiliki file yang cocok.
+          Tinjau hasil pencocokan file. Anda dapat mencocokkan file secara manual untuk kontak yang tidak ditemukan. Kampanye hanya akan dikirim ke kontak yang memiliki file.
         </p>
 
         <div className="overflow-y-auto flex-grow space-y-4">
@@ -45,15 +66,15 @@ const FileMatchResultModal: React.FC<FileMatchResultModalProps> = ({
           <div>
             <h3 className="font-semibold text-green-600 mb-2">
               <i className="fas fa-check-circle mr-2"></i>
-              {matched.length} Kontak Cocok (Akan Dikirim)
+              {currentMatched.length} Kontak Cocok (Akan Dikirim)
             </h3>
-            {matched.length > 0 ? (
+            {currentMatched.length > 0 ? (
               <div className="border rounded-md max-h-48 overflow-y-auto">
                 <ul className="divide-y divide-border text-sm">
-                  {matched.map(({ contact, file }) => (
+                  {currentMatched.map(({ contact, file }) => (
                     <li key={contact.id} className="p-2 flex justify-between items-center">
                       <span>{contact.name} ({contact.number})</span>
-                      <span className="text-muted-foreground text-xs font-mono">{file.name}</span>
+                      <span className="text-muted-foreground text-xs font-mono bg-gray-200 px-1 rounded">{file.name}</span>
                     </li>
                   ))}
                 </ul>
@@ -64,32 +85,40 @@ const FileMatchResultModal: React.FC<FileMatchResultModalProps> = ({
           </div>
           
           {/* Unmatched Contacts */}
-          <div>
-            <h3 className="font-semibold text-red-600 mb-2">
-              <i className="fas fa-times-circle mr-2"></i>
-              {unmatched.length} Kontak Tidak Cocok (Tidak Akan Dikirim)
-            </h3>
-            {unmatched.length > 0 ? (
-              <div className="border rounded-md max-h-48 overflow-y-auto">
-                <ul className="divide-y divide-border text-sm">
-                  {unmatched.map(contact => (
-                    <li key={contact.id} className="p-2">
-                      {contact.name} ({contact.number})
-                    </li>
-                  ))}
-                </ul>
+          {currentUnmatched.length > 0 && (
+             <div>
+                <h3 className="font-semibold text-yellow-700 mb-2">
+                  <i className="fas fa-exclamation-triangle mr-2"></i>
+                  {currentUnmatched.length} Kontak Tidak Cocok (Butuh Pencocokan Manual)
+                </h3>
+                <div className="border rounded-md max-h-48 overflow-y-auto">
+                  <ul className="divide-y divide-border text-sm">
+                    {currentUnmatched.map(contact => (
+                      <li key={contact.id} className="p-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <span>{contact.name} ({contact.number})</span>
+                        <select 
+                          onChange={(e) => handleManualMatch(contact, e.target.value)}
+                          defaultValue=""
+                          className="bg-input border border-border rounded-md px-2 py-1 text-xs w-full sm:w-auto"
+                        >
+                            <option value="" disabled>Pilih file untuk dicocokkan...</option>
+                            {managedFiles.map(file => (
+                                <option key={file.id} value={file.id}>{file.name}</option>
+                            ))}
+                        </select>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
-            ) : (
-                <p className="text-sm text-muted-foreground p-4 border rounded-md">Semua kontak yang dipilih memiliki file yang cocok.</p>
-            )}
-          </div>
+          )}
         </div>
 
         <div className="mt-6 pt-4 border-t flex justify-between items-center">
-            <p className="text-sm font-semibold">Total akan dikirim: {matched.length} pesan.</p>
+            <p className="text-sm font-semibold">Total akan dikirim: {currentMatched.length} pesan.</p>
             <div className="flex space-x-3">
                 <button onClick={onClose} disabled={isSending} className="bg-secondary text-secondary-foreground px-4 py-2 rounded-md font-semibold hover:bg-accent disabled:opacity-50">Batal</button>
-                <button onClick={onConfirm} disabled={isSending || matched.length === 0} className="bg-primary text-primary-foreground px-4 py-2 rounded-md font-semibold hover:bg-primary/90 disabled:opacity-50 flex items-center">
+                <button onClick={() => onConfirm(currentMatched)} disabled={isSending || currentMatched.length === 0} className="bg-primary text-primary-foreground px-4 py-2 rounded-md font-semibold hover:bg-primary/90 disabled:opacity-50 flex items-center">
                   {isSending ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-paper-plane mr-2"></i>}
                   {isSending ? 'Mengirim...' : 'Konfirmasi & Kirim'}
                 </button>
