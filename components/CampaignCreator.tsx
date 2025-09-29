@@ -5,6 +5,7 @@ import { MessageStatus } from '../types';
 import { generateCampaignMessage, translateText } from '../services/geminiService';
 import { sendCampaign } from '../services/campaignService';
 import { useNotification } from '../contexts/NotificationContext';
+import ContactSelectionModal from './ContactSelectionModal';
 
 interface CampaignCreatorProps {
   mode: 'single' | 'bulk' | 'file';
@@ -38,6 +39,7 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [matchedFiles, setMatchedFiles] = useState<{ contactId: string, file: ManagedFile }[]>([]);
   const { addNotification } = useNotification();
+  const [isModalOpen, setIsModalOpen] = useState(false);
   
   const [loadingAction, setLoadingAction] = useState<'generate' | 'translate' | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -189,14 +191,6 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
     }
     setShowAiModal(null);
     setAiPrompt('');
-  };
-
-  const handleSelectAll = () => {
-    if (draft.selectedContacts?.length === contacts.length) {
-      updateDraft('selectedContacts', []);
-    } else {
-      updateDraft('selectedContacts', contacts.map(c => c.id));
-    }
   };
 
   const validateForm = () => {
@@ -362,27 +356,16 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
       {(mode === 'bulk' || mode === 'file') && (
         <div>
             <h3 className="text-lg font-semibold mb-2">Pilih Kontak</h3>
-            <div className={`max-h-60 overflow-y-auto border rounded-md p-2 bg-input ${errors.selectedContacts ? 'border-destructive' : 'border-border'}`}>
-            <div className="flex items-center border-b pb-2 mb-2">
-                <input type="checkbox" id="selectAll" checked={draft.selectedContacts?.length === contacts.length && contacts.length > 0} onChange={handleSelectAll} className="mr-2" />
-                <label htmlFor="selectAll" className="font-medium">Pilih Semua</label>
-            </div>
-            {contacts.map(contact => (
-                <div key={contact.id} className="flex items-center p-1">
-                <input type="checkbox" id={`contact-${contact.id}`} checked={draft.selectedContacts?.includes(contact.id)}
-                    onChange={() => {
-                        const currentSelection = draft.selectedContacts || [];
-                        const newSelection = currentSelection.includes(contact.id)
-                            ? currentSelection.filter(id => id !== contact.id)
-                            : [...currentSelection, contact.id];
-                        updateDraft('selectedContacts', newSelection);
-                    }} className="mr-2" />
-                <label htmlFor={`contact-${contact.id}`}>{contact.name} ({contact.number}) - <span className="text-muted-foreground text-xs">{contact.group}</span></label>
+            <div className="flex items-start gap-4">
+                <button type="button" onClick={() => setIsModalOpen(true)} className="bg-secondary text-secondary-foreground px-4 py-2 rounded-md font-semibold hover:bg-accent flex-shrink-0">
+                    <i className="fas fa-users mr-2"></i>
+                    Pilih Kontak
+                </button>
+                <div className="pt-2">
+                    <p className="text-sm text-muted-foreground">{draft.selectedContacts?.length || 0} dari {contacts.length} kontak terpilih.</p>
                 </div>
-            ))}
             </div>
             {errors.selectedContacts && <p className="text-sm text-destructive mt-1">{errors.selectedContacts}</p>}
-            <p className="text-sm text-muted-foreground mt-1">{draft.selectedContacts?.length || 0} dari {contacts.length} kontak terpilih.</p>
         </div>
       )}
 
@@ -442,6 +425,18 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
                 </div>
             </div>
         </div>
+      )}
+
+      {isModalOpen && (
+          <ContactSelectionModal
+              isOpen={isModalOpen}
+              onClose={() => setIsModalOpen(false)}
+              onSave={(selectedIds) => {
+                  updateDraft('selectedContacts', selectedIds);
+              }}
+              contacts={contacts}
+              initialSelectedIds={draft.selectedContacts || []}
+          />
       )}
 
       <div className="flex justify-end space-x-3 pt-4">
