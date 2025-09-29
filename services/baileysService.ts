@@ -43,7 +43,7 @@ const makeApiRequest = async (endpoint: string, settings: Pick<ApiSettings, 'bai
     }
 }
 
-export const login = async (settings: Pick<ApiSettings, 'baileysServerUrl' | 'baileysApiKey'>): Promise<{ status: 'connected' | 'qr' | 'error', qr?: string, message?: string }> => {
+export const login = async (settings: Pick<ApiSettings, 'baileysServerUrl' | 'baileysApiKey'>): Promise<{ status: 'connected' | 'qr' | 'error', qr?: string, message?: string, connectedNumber?: string }> => {
     console.log('Checking Baileys instance status:', settings.baileysServerUrl);
     
     try {
@@ -51,7 +51,10 @@ export const login = async (settings: Pick<ApiSettings, 'baileysServerUrl' | 'ba
         const response = await makeApiRequest('/sessions/status', settings);
 
         if (response?.status === 'connected') {
-            return { status: 'connected' };
+            // Assumes the response for a connected user includes their JID in `response.data.id`
+            const connectedJid = response.data?.id;
+            const connectedNumber = connectedJid ? connectedJid.split('@')[0] : undefined;
+            return { status: 'connected', connectedNumber: connectedNumber };
         } else if (response?.status === 'qr' && response.qr) {
             // If not connected, assume we need a QR code.
             return { status: 'qr', qr: response.qr };

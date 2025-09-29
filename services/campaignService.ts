@@ -87,7 +87,7 @@ export const sendCampaign = async (
     apiSettings: ApiSettings,
     updateCampaignCallback: (campaign: Campaign) => void,
     contactFiles?: { [contactId: string]: ManagedFile }
-) => {
+): Promise<{ sentCount: number; failedCount: number; }> => {
     const campaignCopy = JSON.parse(JSON.stringify(campaign));
     campaignCopy.status = 'Sending';
     updateCampaignCallback({...campaignCopy});
@@ -160,5 +160,6 @@ export const sendCampaign = async (
 
     const sentCount = campaignCopy.logs.filter(l => l.status === MessageStatus.Sent).length;
     const failedCount = campaignCopy.logs.filter(l => l.status === MessageStatus.Failed).length;
-    alert(`Campaign "${campaignCopy.name}" has finished.\n\nSent: ${sentCount}\nFailed: ${failedCount}`);
+    
+    return { sentCount, failedCount };
 };

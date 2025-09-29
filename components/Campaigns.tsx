@@ -3,6 +3,7 @@ import type { Campaign, Contact, ApiSettings, ManagedFile, DraftCampaign } from 
 import { MessageStatus } from '../types';
 import CampaignCreator from './CampaignCreator';
 import { CampaignLogModal } from './CampaignLogModal';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface CampaignsProps {
   campaigns: Campaign[];
@@ -32,6 +33,7 @@ const Campaigns: React.FC<CampaignsProps> = ({ campaigns, setCampaigns, contacts
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
   const [showNewMenu, setShowNewMenu] = useState(false);
+  const { addNotification } = useNotification();
 
   const handleAddCampaign = (newCampaign: Campaign) => {
     setCampaigns(prev => {
@@ -76,7 +78,7 @@ const Campaigns: React.FC<CampaignsProps> = ({ campaigns, setCampaigns, contacts
 
     setCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, logs: updatedLogs } : c));
     setIsSyncing(null);
-    alert('Status sync complete!');
+    addNotification({ type: 'success', title: 'Sinkronisasi Selesai', message: 'Status kampanye telah diperbarui.' });
   };
 
   const renderContent = () => {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { ApiSettings, SmartReplyMessage } from '../types';
 import { getReplySuggestions } from '../services/geminiService';
+import { useNotification } from '../contexts/NotificationContext';
 
 const MOCK_MESSAGES: SmartReplyMessage[] = [
     { id: 'msg1', sender: '+6281234567890', text: 'Hi, is this item still available?', timestamp: new Date() },
@@ -15,6 +16,7 @@ const SmartReply: React.FC<{ apiSettings: ApiSettings }> = ({ apiSettings }) => 
     const [newMessageText, setNewMessageText] = useState('');
     const [newSender, setNewSender] = useState('+6281111111111');
     const [formErrors, setFormErrors] = useState<{sender?: string; text?: string}>({});
+    const { addNotification } = useNotification();
 
     const handleGetSuggestions = async (messageId: string, text: string) => {
         setIsLoading(messageId);
@@ -123,7 +125,7 @@ const SmartReply: React.FC<{ apiSettings: ApiSettings }> = ({ apiSettings }) => 
                                             <div className="flex flex-wrap gap-2">
                                                 {msg.suggestions.map((s, i) => (
                                                     <button key={i} className="text-sm bg-accent text-accent-foreground px-3 py-1 rounded-full hover:bg-primary hover:text-primary-foreground transition-colors"
-                                                        onClick={() => alert(`Replied with: "${s}"`)}
+                                                        onClick={() => addNotification({type: 'info', title: 'Balasan Disalin (Simulasi)', message: `Disalin: "${s}"`})}
                                                     >
                                                         {s}
                                                     </button>

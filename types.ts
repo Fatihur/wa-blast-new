@@ -47,10 +47,13 @@ export interface Campaign {
 export interface ApiSettings {
   provider: 'fonnte' | 'baileys';
   fonnteApiKey: string;
+  fonnteDeviceStatus?: 'connected' | 'disconnected' | 'checking';
+  fonnteConnectedNumber?: string;
   baileysServerUrl?: string;
   baileysApiKey?: string;
   baileysSessionStatus?: 'disconnected' | 'connecting' | 'connected' | 'error';
   baileysQrCode?: string;
+  baileysConnectedNumber?: string;
   geminiApiKey: string;
   antiBan: {
     delay: number; // in seconds

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import type { Contact, Group } from '../types';
+import { useNotification } from '../contexts/NotificationContext';
 
 declare const XLSX: any;
 
@@ -105,6 +106,7 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, setContacts, groups }) =>
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [targetGroupId, setTargetGroupId] = useState('');
+  const { addNotification } = useNotification();
 
   const filteredContacts = useMemo(() => {
     return contacts.filter(contact => {
@@ -115,25 +117,29 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, setContacts, groups }) =>
   }, [contacts, searchTerm, filterGroup]);
 
   const handleSaveContact = (contact: Contact) => {
-    if (editingContact) {
+    const isEditing = !!editingContact;
+    if (isEditing) {
       setContacts(contacts.map(c => (c.id === contact.id ? contact : c)));
     } else {
       setContacts([...contacts, contact]);
     }
+    addNotification({ type: 'success', title: 'Kontak Disimpan', message: `Kontak "${contact.name}" telah disimpan.` });
     setShowForm(false);
     setEditingContact(null);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this contact?')) {
+  const handleDelete = (id: string, name: string) => {
+    if (window.confirm(`Anda yakin ingin menghapus kontak "${name}"?`)) {
       setContacts(contacts.filter(c => c.id !== id));
+      addNotification({ type: 'success', title: 'Kontak Dihapus', message: `Kontak "${name}" telah dihapus.` });
     }
   };
 
   const handleBulkDelete = () => {
     if (selectedContacts.length === 0) return;
-    if (window.confirm(`Are you sure you want to delete ${selectedContacts.length} selected contacts?`)) {
+    if (window.confirm(`Anda yakin ingin menghapus ${selectedContacts.length} kontak yang dipilih?`)) {
       setContacts(contacts.filter(c => !selectedContacts.includes(c.id)));
+      addNotification({ type: 'success', title: 'Kontak Dihapus', message: `${selectedContacts.length} kontak telah dihapus.` });
       setSelectedContacts([]);
     }
   };
@@ -146,6 +152,7 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, setContacts, groups }) =>
     setContacts(contacts.map(c => 
         selectedContacts.includes(c.id) ? { ...c, group: targetGroup.name } : c
     ));
+    addNotification({ type: 'success', title: 'Kontak Dipindahkan', message: `${selectedContacts.length} kontak dipindahkan ke grup "${targetGroup.name}".` });
     setSelectedContacts([]);
     setShowMoveModal(false);
   };
@@ -157,7 +164,11 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, setContacts, groups }) =>
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
-      const lines = text.split('\n');
+      const lines = text.split('\n').filter(line => line.trim() !== '');
+      if (lines.length < 2) {
+          addNotification({type: 'error', title: 'Impor Gagal', message: 'File CSV kosong atau hanya berisi header.'});
+          return;
+      }
       const header = lines[0].split(',').map(h => h.trim());
       const newContacts: Contact[] = lines.slice(1).map((line): Contact | null => {
         const values = line.split(',');
@@ -172,7 +183,7 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, setContacts, groups }) =>
       }).filter((c): c is Contact => c !== null);
       
       setContacts(prev => [...prev, ...newContacts]);
-      alert(`${newContacts.length} contacts imported successfully!`);
+      addNotification({ type: 'success', title: 'Impor Berhasil', message: `${newContacts.length} kontak berhasil diimpor!` });
     };
     reader.readAsText(file);
     event.target.value = '';
@@ -265,7 +276,7 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, setContacts, groups }) =>
                         <button onClick={() => { setEditingContact(contact); setShowForm(true); }} className="text-muted-foreground hover:text-primary">
                           <i className="fas fa-edit"></i>
                         </button>
-                        <button onClick={() => handleDelete(contact.id)} className="text-muted-foreground hover:text-destructive">
+                        <button onClick={() => handleDelete(contact.id, contact.name)} className="text-muted-foreground hover:text-destructive">
                           <i className="fas fa-trash"></i>
                         </button>
                       </td>

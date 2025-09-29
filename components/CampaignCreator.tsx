@@ -4,6 +4,7 @@ import type { Contact, Campaign, ApiSettings, ManagedFile, DraftCampaign } from 
 import { MessageStatus } from '../types';
 import { generateCampaignMessage, translateText } from '../services/geminiService';
 import { sendCampaign } from '../services/campaignService';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface CampaignCreatorProps {
   mode: 'single' | 'bulk' | 'file';
@@ -36,6 +37,7 @@ const getTodayDateString = () => {
 const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, onCancel, contacts, apiSettings, managedFiles, draft, setDraft }) => {
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [matchedFiles, setMatchedFiles] = useState<{ contactId: string, file: ManagedFile }[]>([]);
+  const { addNotification } = useNotification();
   
   const [loadingAction, setLoadingAction] = useState<'generate' | 'translate' | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -262,7 +264,11 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
       onAddCampaign(campaign);
 
       if (schedule) {
-          alert(`Campaign "${campaign.name}" has been scheduled for ${schedule.toLocaleString()}.`);
+          addNotification({
+              type: 'info',
+              title: 'Kampanye Dijadwalkan',
+              message: `"${campaign.name}" dijadwalkan untuk ${schedule.toLocaleString()}.`
+          });
           setIsSending(false);
       } else {
           const contactFilesMap = matchedFiles.reduce((acc, curr) => {
@@ -270,11 +276,16 @@ const CampaignCreator: React.FC<CampaignCreatorProps> = ({ mode, onAddCampaign, 
               return acc;
           }, {} as { [contactId: string]: ManagedFile });
           
-          await sendCampaign(campaign, contacts, apiSettings, onAddCampaign, contactFilesMap);
+          const { sentCount, failedCount } = await sendCampaign(campaign, contacts, apiSettings, onAddCampaign, contactFilesMap);
+          addNotification({
+              type: failedCount > 0 ? 'warning' : 'success',
+              title: `Kampanye "${campaign.name}" Selesai`,
+              message: `Hasil: ${sentCount} terkirim, ${failedCount} gagal.`
+          });
           setIsSending(false);
       }
 
-  }, [draft, contacts, apiSettings, onAddCampaign, mode, matchedFiles]);
+  }, [draft, contacts, apiSettings, onAddCampaign, mode, matchedFiles, addNotification]);
 
   const allCustomFields = useMemo(() => {
     const keys = new Set<string>();

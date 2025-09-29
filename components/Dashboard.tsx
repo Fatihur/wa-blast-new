@@ -1,11 +1,12 @@
 import React from 'react';
-import type { Campaign, Contact } from '../types';
+import type { Campaign, Contact, ApiSettings } from '../types';
 import { MessageStatus } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface DashboardProps {
   campaigns: Campaign[];
   contacts: Contact[];
+  apiSettings: ApiSettings;
 }
 
 const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode }> = ({ title, value, icon }) => (
@@ -18,7 +19,7 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: React.Re
   </div>
 );
 
-const Dashboard: React.FC<DashboardProps> = ({ campaigns, contacts }) => {
+const Dashboard: React.FC<DashboardProps> = ({ campaigns, contacts, apiSettings }) => {
   const totalMessagesSent = campaigns.reduce((acc, c) => acc + (c.logs?.filter(l => l.status === MessageStatus.Sent).length || 0), 0);
   const totalMessagesFailed = campaigns.reduce((acc, c) => acc + (c.logs?.filter(l => l.status === MessageStatus.Failed).length || 0), 0);
   
@@ -27,6 +28,17 @@ const Dashboard: React.FC<DashboardProps> = ({ campaigns, contacts }) => {
     sent: c.logs?.filter(l => l.status === MessageStatus.Sent).length || 0,
     failed: c.logs?.filter(l => l.status === MessageStatus.Failed).length || 0,
   }));
+  
+  const getConnectedNumber = () => {
+    if (apiSettings.provider === 'baileys' && apiSettings.baileysSessionStatus === 'connected') {
+        return apiSettings.baileysConnectedNumber;
+    }
+    if (apiSettings.provider === 'fonnte' && apiSettings.fonnteDeviceStatus === 'connected') {
+        return apiSettings.fonnteConnectedNumber;
+    }
+    return null;
+  }
+  const connectedNumber = getConnectedNumber();
 
   return (
     <div className="space-y-8">
@@ -34,6 +46,16 @@ const Dashboard: React.FC<DashboardProps> = ({ campaigns, contacts }) => {
         <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
         <p className="text-muted-foreground">Welcome back! Here's a summary of your activities.</p>
       </header>
+      
+      {connectedNumber && (
+        <div className="bg-green-100 border-l-4 border-green-500 text-green-800 p-4 rounded-md flex items-center gap-4" role="alert">
+            <i className="fab fa-whatsapp fa-2x"></i>
+            <div>
+                <p className="font-bold">WhatsApp Connected</p>
+                <p>Nomor yang terkoneksi: <span className="font-mono font-semibold">{connectedNumber}</span></p>
+            </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard title="Total Campaigns" value={campaigns.length} icon={<i className="fas fa-comment-dots fa-xl"></i>} />

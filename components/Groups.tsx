@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { Group } from '../types';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface GroupsProps {
   groups: Group[];
@@ -11,6 +12,7 @@ const Groups: React.FC<GroupsProps> = ({ groups, setGroups }) => {
   const [groupName, setGroupName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState('');
+  const { addNotification } = useNotification();
 
   const handleSave = () => {
     if (!groupName.trim()) {
@@ -18,24 +20,27 @@ const Groups: React.FC<GroupsProps> = ({ groups, setGroups }) => {
         return;
     }
     setError('');
-    if (editingGroup) {
+    const isEditing = !!editingGroup;
+    if (isEditing) {
       setGroups(groups.map(g => g.id === editingGroup.id ? { ...g, name: groupName } : g));
     } else {
       const newGroup: Group = { id: `group_${Date.now()}`, name: groupName };
       setGroups([...groups, newGroup]);
     }
+    addNotification({ type: 'success', title: 'Grup Disimpan', message: `Grup "${groupName}" telah disimpan.` });
     setEditingGroup(null);
     setGroupName('');
     setIsAdding(false);
   };
   
-  const handleDelete = (id: string) => {
+  const handleDelete = (id: string, name: string) => {
     if (id === 'general') {
-        alert("Cannot delete the default 'General' group.");
+        addNotification({type: 'warning', title: 'Aksi Ditolak', message: "Tidak dapat menghapus grup default 'General'."});
         return;
     }
-    if (window.confirm('Are you sure you want to delete this group? This action cannot be undone.')) {
+    if (window.confirm(`Anda yakin ingin menghapus grup "${name}"? Tindakan ini tidak dapat dibatalkan.`)) {
         setGroups(groups.filter(g => g.id !== id));
+        addNotification({ type: 'success', title: 'Grup Dihapus', message: `Grup "${name}" telah dihapus.` });
     }
   };
   
@@ -113,7 +118,7 @@ const Groups: React.FC<GroupsProps> = ({ groups, setGroups }) => {
                       <i className="fas fa-edit"></i>
                     </button>
                     {group.id !== 'general' && (
-                        <button onClick={() => handleDelete(group.id)} className="text-muted-foreground hover:text-destructive">
+                        <button onClick={() => handleDelete(group.id, group.name)} className="text-muted-foreground hover:text-destructive">
                             <i className="fas fa-trash"></i>
                         </button>
                     )}
